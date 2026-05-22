@@ -483,41 +483,50 @@ def conteudo() -> list:
         "as escolhas de produto."
     ))
     el.append(p(
-        "<b>Mapa de volatilidade Gov 2014→2018:</b> padrão "
-        "centro-periferia clássico. Plano Piloto e Cruzeiro com "
-        "volatilidade nominal baixa (~0,60); periferia oeste "
-        "(Samambaia, Recanto das Emas, Ceilândia) com volatilidade "
-        "alta (~0,85). A inflexão ideológica de Ibaneis Rocha pegou "
-        "principalmente a periferia."
+        "<b>Mapa de volatilidade Governador 2018→2022, por local "
+        "(N = 593):</b> o agregado por zona/RA mostra Plano Piloto como "
+        "estável (Pedersen ≈ 0,46), mas ao nível do local de votação o "
+        "padrão se inverte. Locais individuais do Plano Piloto têm "
+        "Pedersen entre 0,55 e 0,71 — a baixa volatilidade agregada "
+        "<i>esconde rotação intra-zona</i>: locais vizinhos trocam "
+        "votos entre partidos em direções opostas e o agregado cancela. "
+        "É exatamente o tipo de padrão que só aparece com granularidade "
+        "de local."
     ))
 
-    fig_path = _ROOT / "outputs/figures/mapa_volatilidade_governador_2014_2018.png"
+    fig_path = _ROOT / "outputs/figures/mapa_volatilidade_local_governador_2018_2022.png"
     if fig_path.exists():
         el.extend(fig(
-            fig_path, w_cm=14,
-            legenda="Volatilidade Pedersen por RA — Governador, 2014→2018. "
-            "Cores escuras = baixa volatilidade (base estável). Cores "
-            "claras = alta volatilidade (terreno de disputa).",
+            fig_path, w_cm=15,
+            legenda="Volatilidade Pedersen por local de votação — Governador, "
+            "2018→2022. N = 593 locais com cobertura completa de partidos. "
+            "Cores escuras = volatilidade baixa; claras = alta. Pontos "
+            "concentrados no quadrante centro/sul revelam o Plano Piloto, "
+            "Lago Norte/Sul, Sudoeste/Octogonal e Cruzeiro — onde a rotação "
+            "intra-local mais ocorreu.",
         ))
 
     el.append(p(
-        "<b>Mapa de volatilidade Presidente 2018→2022:</b> inversão "
-        "parcial do padrão. Plano Piloto e Águas Claras com volatilidade "
-        "mais alta (0,83); Sobradinho, Planaltina e Paranoá mais "
-        "estáveis (0,78). O eleitorado de elite trocou mais entre "
-        "Bolsonaro e Lula que a periferia, que ficou relativamente "
-        "ancorada. Combinado com a decomposição Bartolini-Mair "
-        "(prop_entre = 12,1% para Presidente 2018→2022), a leitura "
-        "substantiva é: a troca foi entre <i>partidos do mesmo polo "
-        "de direita</i> na elite cosmopolita, sem mudança de polo "
-        "líquida significativa."
+        "<b>Mapa de volatilidade Dep. Distrital 2018→2022, por local "
+        "(N = 593):</b> padrão diferente do Governador. A rotação "
+        "intra-local mais alta está em Lago Sul e Sudoeste/Octogonal, "
+        "com periferia oeste (Ceilândia, Samambaia, Recanto das Emas) "
+        "marcadamente estável. A leitura é que a infidelidade partidária "
+        "no proporcional distrital se concentra na elite educada — "
+        "exatamente o eleitor que tem o repertório informacional para "
+        "trocar entre nomes do mesmo campo. Nas RAs populares, o voto "
+        "distrital é fiel ao partido/candidato de referência local."
     ))
 
-    fig_path_2 = _ROOT / "outputs/figures/mapa_volatilidade_presidente_2018_2022.png"
+    fig_path_2 = _ROOT / "outputs/figures/mapa_volatilidade_local_deputado_distrital_2018_2022.png"
     if fig_path_2.exists():
         el.extend(fig(
-            fig_path_2, w_cm=14,
-            legenda="Volatilidade Pedersen por RA — Presidente, 2018→2022.",
+            fig_path_2, w_cm=15,
+            legenda="Volatilidade Pedersen por local de votação — Dep. "
+            "Distrital, 2018→2022. Padrão distinto do Governador: rotação "
+            "intra-local concentrada em Lago Sul e Sudoeste/Octogonal "
+            "(amarelo), com periferia oeste (Ceilândia, Samambaia, Recanto "
+            "das Emas) marcadamente estável (roxo).",
         ))
 
     el.append(PageBreak())
