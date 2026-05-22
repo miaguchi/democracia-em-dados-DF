@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.vscode/
+data/raw/
+data/processed/
+*.zip
+!tests/fixtures/*.zip
+.claude/
+
+# Outputs gerados por side effects em imports (dívida técnica, ver CLAUDE.md)
+outputs/mapa_blocos_sjbv_secao_*.png
+outputs/mapa_espectro_sjbv_*.png
+outputs/grafico_convergencia_temporal.png
