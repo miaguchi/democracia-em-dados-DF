@@ -1,0 +1,6 @@
+,Distrital,Federal,Senador,Governador,Presidente
+Distrital,1.0,0.349,-0.14,0.425,-0.128
+Federal,0.349,1.0,0.163,0.409,-0.165
+Senador,-0.14,0.163,1.0,0.3,0.696
+Governador,0.425,0.409,0.3,1.0,0.498
+Presidente,-0.128,-0.165,0.696,0.498,1.0
