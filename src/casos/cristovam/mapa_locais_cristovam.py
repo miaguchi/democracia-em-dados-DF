@@ -37,7 +37,10 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
 from matplotlib.lines import Line2D
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 warnings.filterwarnings("ignore")
 
@@ -170,14 +173,89 @@ def main() -> None:
     print(f"   RAs com pelo menos 1 local: {com_dado}/{len(ras_plot)}")
 
     # ===== Plot =====
-    fig = plt.figure(figsize=(20, 12), dpi=120)
-    gs = fig.add_gridspec(2, 3, width_ratios=[1, 1, 0.9], hspace=0.18, wspace=0.10)
+    # Layout: 1 mapa grande (choropleth share por RA + bolhas de votos)
+    # + ranking top 30 à direita. Sem painéis duplicados, sem colorbars
+    # do geopandas (uso cax fixado via make_axes_locatable).
+    fig = plt.figure(figsize=(20, 13), dpi=120)
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.7, 1.0], wspace=0.08)
+    ax_map = fig.add_subplot(gs[0, 0])
+    ax_rank = fig.add_subplot(gs[0, 1])
 
-    # PAINEL 1: bolhas nos locais sobre RAs
-    ax1 = fig.add_subplot(gs[:, 0])
-    ras_plot.plot(ax=ax1, facecolor="#f5f5f5", edgecolor="white", linewidth=0.6)
+    # ----- MAPA: choropleth share por RA (Blues) + bolhas vermelhas -----
+    com_dado_df = ras_plot[ras_plot["share"].notna()].copy()
+    vmin = float(com_dado_df["share"].min())
+    vmax = float(com_dado_df["share"].max())
+    cmap = plt.get_cmap("Blues")
+    norm = Normalize(vmin=vmin, vmax=vmax)
 
-    # Quartis de share para colorir
+    sem_dado = ras_plot[ras_plot["share"].isna()]
+    if not sem_dado.empty:
+        sem_dado.plot(ax=ax_map, color="#f0f0f0",
+                      edgecolor="#888", linewidth=0.5)
+    com_dado_df.plot(ax=ax_map, column="share", cmap=cmap,
+                     vmin=vmin, vmax=vmax,
+                     edgecolor="black", linewidth=0.5, alpha=0.92)
+
+    # Anotações curtas das RAs (somente as grandes, sem caixa branca)
+    grandes = ["Plano Piloto", "Ceilândia", "Taguatinga", "Samambaia",
+               "Lago Sul", "Lago Norte", "Águas Claras", "Gama",
+               "Planaltina", "Sobradinho", "Recanto das Emas", "Paranoá",
+               "Cruzeiro", "Sudoeste/Octogonal", "Guará", "Brazlândia",
+               "Núcleo Bandeirante", "Riacho Fundo", "Santa Maria",
+               "São Sebastião", "Vicente Pires"]
+    for _, r in com_dado_df.iterrows():
+        if r["name_subdistrict"] in grandes:
+            cx, cy = r.geometry.centroid.x, r.geometry.centroid.y
+            ax_map.annotate(
+                f"{r['name_subdistrict']}\n{r['share']:.1f}%",
+                xy=(cx, cy), ha="center", va="center", fontsize=6.5,
+                color="#222", fontweight="bold", alpha=0.85,
+            )
+
+    # Bolhas (locais) em vermelho — tamanho = votos absolutos
+    gdf["_size"] = np.clip(gdf["votos_cristovam"] / 8, 5, 280)
+    ax_map.scatter(
+        gdf["lon"], gdf["lat"], s=gdf["_size"],
+        facecolor="#d62728", edgecolor="white", linewidth=0.4, alpha=0.75,
+    )
+
+    ax_map.set_title(
+        f"Cristovam Buarque 2018 — locais de votação sobre share por RA\n"
+        f"Choropleth (RA) = share agregado | Bolhas (local) = votos absolutos",
+        fontsize=12, fontweight="bold", pad=10,
+    )
+    ax_map.set_axis_off()
+
+    # Colorbar do choropleth pinada à direita do mapa
+    divider = make_axes_locatable(ax_map)
+    cax = divider.append_axes("right", size="2.5%", pad=0.1,
+                              axes_class=plt.Axes)
+    sm = ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cb = fig.colorbar(sm, cax=cax)
+    cb.set_label("Share Cristovam por RA (%)", fontsize=9)
+    cb.ax.tick_params(labelsize=8)
+
+    # Legenda de tamanhos das bolhas — caixa flutuante no canto inferior
+    # esquerdo do mapa, sem cobrir o Plano Piloto (centro-leste)
+    sizes_demo = [100, 500, 1500, 2500]
+    handles_size = [
+        Line2D([], [], marker="o", linestyle="",
+               markerfacecolor="#d62728", markeredgecolor="white",
+               markersize=np.sqrt(np.clip(v / 8, 5, 280)),
+               alpha=0.75, label=f"{v:,} votos".replace(",", "."))
+        for v in sizes_demo
+    ]
+    ax_map.legend(
+        handles=handles_size, loc="lower left", fontsize=8,
+        title="Votos Cristovam por local", title_fontsize=8.5,
+        framealpha=0.95, labelspacing=1.2, borderpad=0.9,
+    )
+
+    # ----- RANKING top 30 -----
+    top30 = df.dropna(subset=["lat"]).nlargest(30, "votos_cristovam").iloc[::-1]
+
+    # Cor da barra = quartil de share local (4 níveis de azul)
     q = np.nanpercentile(gdf["share"], [25, 50, 75])
     cores_q = ["#bdd7e7", "#6baed6", "#3182bd", "#08519c"]
     def quartil(s):
@@ -185,136 +263,61 @@ def main() -> None:
         if s < q[1]: return 1
         if s < q[2]: return 2
         return 3
-    gdf["_qshare"] = gdf["share"].apply(quartil)
-    gdf["_cor"] = gdf["_qshare"].map(dict(enumerate(cores_q)))
-    gdf["_size"] = np.clip(gdf["votos_cristovam"] / 8, 5, 250)
-
-    ax1.scatter(gdf["lon"], gdf["lat"], s=gdf["_size"], c=gdf["_cor"],
-                edgecolor="black", linewidth=0.3, alpha=0.85)
-
-    # Anotar nomes de RA grandes
-    grandes = ["Plano Piloto", "Ceilândia", "Taguatinga", "Samambaia",
-               "Lago Sul", "Lago Norte", "Águas Claras", "Gama",
-               "Planaltina", "Sobradinho", "Recanto das Emas", "Paranoá",
-               "Cruzeiro", "Sudoeste/Octogonal", "Guará"]
-    for _, row in ras_plot.iterrows():
-        if row["name_subdistrict"] in grandes and row.geometry is not None:
-            cent = row.geometry.representative_point()
-            ax1.annotate(row["name_subdistrict"], (cent.x, cent.y),
-                         ha="center", va="center", fontsize=7,
-                         color="#444", alpha=0.7)
-    ax1.set_title(f"Locais de votação — Cristovam 2018 (N={len(gdf)})\n"
-                  f"Tamanho = votos absolutos | Cor = share local (quartis)",
-                  fontsize=11, fontweight="bold")
-    ax1.set_axis_off()
-
-    # Legenda tamanho
-    sizes_demo = [50, 500, 2000]
-    handles_size = [
-        Line2D([], [], marker="o", linestyle="",
-               markerfacecolor="#08519c", markeredgecolor="black",
-               markersize=np.sqrt(np.clip(v/8, 5, 250)),
-               label=f"{v} votos")
-        for v in sizes_demo
-    ]
-    handles_cor = [
-        Line2D([], [], marker="o", linestyle="", markerfacecolor=cores_q[0],
-               markeredgecolor="black", markersize=8,
-               label=f"share <{q[0]:.1f}% (Q1)"),
-        Line2D([], [], marker="o", linestyle="", markerfacecolor=cores_q[1],
-               markeredgecolor="black", markersize=8,
-               label=f"{q[0]:.1f}–{q[1]:.1f}% (Q2)"),
-        Line2D([], [], marker="o", linestyle="", markerfacecolor=cores_q[2],
-               markeredgecolor="black", markersize=8,
-               label=f"{q[1]:.1f}–{q[2]:.1f}% (Q3)"),
-        Line2D([], [], marker="o", linestyle="", markerfacecolor=cores_q[3],
-               markeredgecolor="black", markersize=8,
-               label=f">{q[2]:.1f}% (Q4)"),
-    ]
-    leg1 = ax1.legend(handles=handles_size, loc="lower left", fontsize=8,
-                      title="Volume", framealpha=0.92)
-    ax1.add_artist(leg1)
-    ax1.legend(handles=handles_cor, loc="upper right", fontsize=8,
-               title="Intensidade", framealpha=0.92)
-
-    # PAINEL 2: choropleth das RAs por share agregado
-    ax2 = fig.add_subplot(gs[0, 1])
-    ras_plot.boundary.plot(ax=ax2, color="#888", linewidth=0.5)
-    sem_dado = ras_plot[ras_plot["share"].isna()]
-    if not sem_dado.empty:
-        sem_dado.plot(ax=ax2, color="#f0f0f0", edgecolor="#888", linewidth=0.5)
-    com_dado_df = ras_plot[ras_plot["share"].notna()].copy()
-    com_dado_df.plot(ax=ax2, column="share", cmap="Blues",
-                     edgecolor="black", linewidth=0.4, alpha=0.92,
-                     legend=True,
-                     legend_kwds={"label": "Share Cristovam (%)",
-                                  "shrink": 0.7, "orientation": "vertical"})
-    for _, r in com_dado_df.iterrows():
-        cx, cy = r.geometry.centroid.x, r.geometry.centroid.y
-        ax2.annotate(
-            f"{r['name_subdistrict'][:12]}\n{r['share']:.1f}%",
-            xy=(cx, cy), ha="center", va="center", fontsize=6.5,
-            fontweight="bold",
-            bbox=dict(boxstyle="round,pad=0.15", facecolor="white",
-                      edgecolor="gray", alpha=0.85),
-        )
-    ax2.set_title("Share agregado por RA\n(ponderado pelos votos válidos)",
-                  fontsize=10, fontweight="bold")
-    ax2.set_axis_off()
-
-    # PAINEL 3: votos absolutos agregados por RA
-    ax3 = fig.add_subplot(gs[1, 1])
-    ras_plot.boundary.plot(ax=ax3, color="#888", linewidth=0.5)
-    sem_dado3 = ras_plot[ras_plot["votos_cristovam"].isna()]
-    if not sem_dado3.empty:
-        sem_dado3.plot(ax=ax3, color="#f0f0f0", edgecolor="#888", linewidth=0.5)
-    com_dado_df.plot(ax=ax3, column="votos_cristovam", cmap="Greens",
-                     edgecolor="black", linewidth=0.4, alpha=0.92,
-                     legend=True,
-                     legend_kwds={"label": "Votos absolutos",
-                                  "shrink": 0.7, "orientation": "vertical"})
-    for _, r in com_dado_df.iterrows():
-        cx, cy = r.geometry.centroid.x, r.geometry.centroid.y
-        ax3.annotate(
-            f"{r['name_subdistrict'][:12]}\n"
-            f"{int(r['votos_cristovam']):,}".replace(",", "."),
-            xy=(cx, cy), ha="center", va="center", fontsize=6.5,
-            fontweight="bold",
-            bbox=dict(boxstyle="round,pad=0.15", facecolor="white",
-                      edgecolor="gray", alpha=0.85),
-        )
-    ax3.set_title("Votos absolutos agregados por RA",
-                  fontsize=10, fontweight="bold")
-    ax3.set_axis_off()
-
-    # PAINEL 4: top 30 ranking
-    ax4 = fig.add_subplot(gs[:, 2])
-    top30 = df.dropna(subset=["lat"]).nlargest(30, "votos_cristovam").iloc[::-1]
     cores_bar = top30["share"].apply(quartil).map(dict(enumerate(cores_q)))
     labels = [
-        f"Z{int(r.NR_ZONA)} • {str(r.nome)[:32]}"
+        f"Z{int(r.NR_ZONA)} • {str(r.nome)[:34]}"
         for _, r in top30.iterrows()
     ]
-    ax4.barh(range(len(top30)), top30["votos_cristovam"],
-             color=cores_bar, edgecolor="black", linewidth=0.4, alpha=0.9)
-    ax4.set_yticks(range(len(top30)))
-    ax4.set_yticklabels(labels, fontsize=7)
+    ax_rank.barh(range(len(top30)), top30["votos_cristovam"],
+                 color=cores_bar, edgecolor="black", linewidth=0.4, alpha=0.92)
+    ax_rank.set_yticks(range(len(top30)))
+    ax_rank.set_yticklabels(labels, fontsize=8)
+    ax_rank.set_ylim(-0.6, len(top30) - 0.4)
+
+    # Rótulos numéricos no fim de cada barra
+    xmax = top30["votos_cristovam"].max()
     for i, (_, r) in enumerate(top30.iterrows()):
-        ax4.text(r.votos_cristovam + 20, i,
-                 f"{int(r.votos_cristovam):,} ({r.share:.0f}%)",
-                 va="center", fontsize=6.5)
-    ax4.set_xlabel("Votos Cristovam 2018", fontsize=9)
-    ax4.set_title("Top 30 locais — base residual 2018",
-                  fontsize=10, fontweight="bold")
-    ax4.grid(axis="x", alpha=0.3)
+        ax_rank.text(
+            r.votos_cristovam + xmax * 0.012, i,
+            f"{int(r.votos_cristovam):,} ({r.share:.0f}%)".replace(",", "."),
+            va="center", fontsize=7,
+        )
+    ax_rank.set_xlim(0, xmax * 1.22)
+    ax_rank.set_xlabel("Votos Cristovam 2018 (rótulo: total e share local)",
+                       fontsize=9)
+    ax_rank.set_title("Top 30 locais — base residual 2018",
+                      fontsize=12, fontweight="bold", pad=10)
+    ax_rank.grid(axis="x", alpha=0.3, linestyle=":")
+    ax_rank.spines[["top", "right"]].set_visible(False)
+
+    # Legenda dos quartis de share dentro do ranking, em cima
+    handles_cor = [
+        Line2D([], [], marker="s", linestyle="", markerfacecolor=cores_q[0],
+               markeredgecolor="black", markersize=9,
+               label=f"share local <{q[0]:.1f}%"),
+        Line2D([], [], marker="s", linestyle="", markerfacecolor=cores_q[1],
+               markeredgecolor="black", markersize=9,
+               label=f"{q[0]:.1f}–{q[1]:.1f}%"),
+        Line2D([], [], marker="s", linestyle="", markerfacecolor=cores_q[2],
+               markeredgecolor="black", markersize=9,
+               label=f"{q[1]:.1f}–{q[2]:.1f}%"),
+        Line2D([], [], marker="s", linestyle="", markerfacecolor=cores_q[3],
+               markeredgecolor="black", markersize=9,
+               label=f">{q[2]:.1f}%"),
+    ]
+    ax_rank.legend(handles=handles_cor, loc="lower right", fontsize=7.5,
+                   title="Intensidade local (quartis)", title_fontsize=8,
+                   framealpha=0.95)
 
     fig.suptitle(
         "CRISTOVAM BUARQUE — MAPA POR LOCAL DE VOTAÇÃO (Senador, DF, 2018)\n"
-        f"{len(gdf):,} locais geocodificados | "
-        f"{int(df['votos_cristovam'].sum()):,} votos totais | "
-        f"share médio {df['share'].mean():.1f}% | mediana {df['share'].median():.1f}%",
-        fontsize=13, fontweight="bold",
+        f"{len(gdf):,} locais geocodificados  |  "
+        f"{int(df['votos_cristovam'].sum()):,} votos totais  |  "
+        f"share médio {df['share'].mean():.1f}%  |  "
+        f"mediana {df['share'].median():.1f}%".replace(",", "."),
+        fontsize=13, fontweight="bold", y=0.995,
     )
+    fig.subplots_adjust(top=0.93, bottom=0.04, left=0.02, right=0.99)
     SAIDA_FIG.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(SAIDA_FIG, dpi=300, bbox_inches="tight")
     plt.close()
