@@ -176,8 +176,8 @@ def main() -> None:
     # Layout: 1 mapa grande (choropleth share por RA + bolhas de votos)
     # + ranking top 30 à direita. Sem painéis duplicados, sem colorbars
     # do geopandas (uso cax fixado via make_axes_locatable).
-    fig = plt.figure(figsize=(20, 13), dpi=120)
-    gs = fig.add_gridspec(1, 2, width_ratios=[1.7, 1.0], wspace=0.08)
+    fig = plt.figure(figsize=(22, 15), dpi=120)
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.4, 1.0], wspace=0.22)
     ax_map = fig.add_subplot(gs[0, 0])
     ax_rank = fig.add_subplot(gs[0, 1])
 
@@ -255,59 +255,50 @@ def main() -> None:
     # ----- RANKING top 30 -----
     top30 = df.dropna(subset=["lat"]).nlargest(30, "votos_cristovam").iloc[::-1]
 
-    # Cor da barra = quartil de share local (4 níveis de azul)
-    q = np.nanpercentile(gdf["share"], [25, 50, 75])
-    cores_q = ["#bdd7e7", "#6baed6", "#3182bd", "#08519c"]
-    def quartil(s):
-        if s < q[0]: return 0
-        if s < q[1]: return 1
-        if s < q[2]: return 2
-        return 3
-    cores_bar = top30["share"].apply(quartil).map(dict(enumerate(cores_q)))
+    # Cor da barra = densidade de votos absolutos (Reds gradient)
+    cmap_bar = plt.get_cmap("Reds")
+    vmin_bar = float(top30["votos_cristovam"].min())
+    vmax_bar = float(top30["votos_cristovam"].max())
+    norm_bar = Normalize(vmin=vmin_bar, vmax=vmax_bar)
+    cores_bar = [cmap_bar(norm_bar(v)) for v in top30["votos_cristovam"]]
+
+    # Labels curtos: "Z15 • UNIEURO" (truncado a 24 chars no nome do local)
     labels = [
-        f"Z{int(r.NR_ZONA)} • {str(r.nome)[:34]}"
+        f"Z{int(r.NR_ZONA):>2} • {str(r.nome)[:24]}"
         for _, r in top30.iterrows()
     ]
     ax_rank.barh(range(len(top30)), top30["votos_cristovam"],
-                 color=cores_bar, edgecolor="black", linewidth=0.4, alpha=0.92)
+                 color=cores_bar, edgecolor="black", linewidth=0.4, alpha=0.95)
     ax_rank.set_yticks(range(len(top30)))
-    ax_rank.set_yticklabels(labels, fontsize=8)
+    ax_rank.set_yticklabels(labels, fontsize=8.5)
+    ax_rank.tick_params(axis="y", which="major", pad=4)
     ax_rank.set_ylim(-0.6, len(top30) - 0.4)
 
-    # Rótulos numéricos no fim de cada barra
+    # Rótulos numéricos no fim de cada barra: total e share local
     xmax = top30["votos_cristovam"].max()
     for i, (_, r) in enumerate(top30.iterrows()):
         ax_rank.text(
             r.votos_cristovam + xmax * 0.012, i,
-            f"{int(r.votos_cristovam):,} ({r.share:.0f}%)".replace(",", "."),
-            va="center", fontsize=7,
+            f"{int(r.votos_cristovam):,}".replace(",", ".") + f"  ({r.share:.1f}%)",
+            va="center", fontsize=7.5,
         )
-    ax_rank.set_xlim(0, xmax * 1.22)
-    ax_rank.set_xlabel("Votos Cristovam 2018 (rótulo: total e share local)",
-                       fontsize=9)
+    ax_rank.set_xlim(0, xmax * 1.28)
+    ax_rank.set_xlabel("Votos Cristovam 2018  (rótulo final: total e share local %)",
+                       fontsize=9.5)
     ax_rank.set_title("Top 30 locais — base residual 2018",
                       fontsize=12, fontweight="bold", pad=10)
     ax_rank.grid(axis="x", alpha=0.3, linestyle=":")
     ax_rank.spines[["top", "right"]].set_visible(False)
 
-    # Legenda dos quartis de share dentro do ranking, em cima
-    handles_cor = [
-        Line2D([], [], marker="s", linestyle="", markerfacecolor=cores_q[0],
-               markeredgecolor="black", markersize=9,
-               label=f"share local <{q[0]:.1f}%"),
-        Line2D([], [], marker="s", linestyle="", markerfacecolor=cores_q[1],
-               markeredgecolor="black", markersize=9,
-               label=f"{q[0]:.1f}–{q[1]:.1f}%"),
-        Line2D([], [], marker="s", linestyle="", markerfacecolor=cores_q[2],
-               markeredgecolor="black", markersize=9,
-               label=f"{q[1]:.1f}–{q[2]:.1f}%"),
-        Line2D([], [], marker="s", linestyle="", markerfacecolor=cores_q[3],
-               markeredgecolor="black", markersize=9,
-               label=f">{q[2]:.1f}%"),
-    ]
-    ax_rank.legend(handles=handles_cor, loc="lower right", fontsize=7.5,
-                   title="Intensidade local (quartis)", title_fontsize=8,
-                   framealpha=0.95)
+    # Colorbar à direita do ranking — densidade de votos
+    divider_rank = make_axes_locatable(ax_rank)
+    cax_rank = divider_rank.append_axes("right", size="2.5%", pad=0.1,
+                                        axes_class=plt.Axes)
+    sm_bar = ScalarMappable(cmap=cmap_bar, norm=norm_bar)
+    sm_bar.set_array([])
+    cb_bar = fig.colorbar(sm_bar, cax=cax_rank)
+    cb_bar.set_label("Votos Cristovam (densidade)", fontsize=9)
+    cb_bar.ax.tick_params(labelsize=8)
 
     fig.suptitle(
         "CRISTOVAM BUARQUE — MAPA POR LOCAL DE VOTAÇÃO (Senador, DF, 2018)\n"
