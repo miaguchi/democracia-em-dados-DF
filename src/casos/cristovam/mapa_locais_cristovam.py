@@ -159,6 +159,15 @@ def main() -> None:
     sj = sj.dropna(subset=["name_subdistrict"])
     print(f"\n4) Spatial join: {len(sj)}/{len(gdf)} locais dentro de uma RA")
 
+    # Propaga RA de volta para df e gdf (usado no ranking)
+    ra_lookup = (
+        sj[["NR_ZONA", "NR_LOCAL_VOTACAO", "name_subdistrict"]]
+        .drop_duplicates(subset=["NR_ZONA", "NR_LOCAL_VOTACAO"])
+        .rename(columns={"name_subdistrict": "RA"})
+    )
+    df = df.merge(ra_lookup, on=["NR_ZONA", "NR_LOCAL_VOTACAO"], how="left")
+    gdf = gdf.merge(ra_lookup, on=["NR_ZONA", "NR_LOCAL_VOTACAO"], how="left")
+
     by_ra = sj.groupby("name_subdistrict").apply(
         lambda g: pd.Series({
             "votos_cristovam": g["votos_cristovam"].sum(),
@@ -176,8 +185,8 @@ def main() -> None:
     # Layout: 1 mapa grande (choropleth share por RA + bolhas de votos)
     # + ranking top 30 à direita. Sem painéis duplicados, sem colorbars
     # do geopandas (uso cax fixado via make_axes_locatable).
-    fig = plt.figure(figsize=(22, 15), dpi=120)
-    gs = fig.add_gridspec(1, 2, width_ratios=[1.4, 1.0], wspace=0.22)
+    fig = plt.figure(figsize=(22, 16), dpi=120)
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.7, 0.7], wspace=0.55)
     ax_map = fig.add_subplot(gs[0, 0])
     ax_rank = fig.add_subplot(gs[0, 1])
 
@@ -286,33 +295,38 @@ def main() -> None:
     norm_bar = Normalize(vmin=vmin_bar, vmax=vmax_bar)
     cores_bar = [cmap_bar(norm_bar(v)) for v in top30["votos_cristovam"]]
 
-    # Labels curtos com numeração (top 10 numerados pra casar com bolhas
-    # destacadas no mapa). top30 está em ordem crescente (smallest no
-    # topo do barh por causa do iloc[::-1]); número de ranking é
-    # (len(top30) - i) — ou seja, o último elemento iterado é o #1.
+    # Labels em 2 linhas: nome completo da escola + (Zona · RA). Top 10
+    # prefixado com #N pra casar com as bolhas numeradas no mapa.
+    # top30 está em ordem crescente (iloc[::-1]); rank = len(top30) - i.
     labels = []
     for i, (_, r) in enumerate(top30.iterrows()):
         rank = len(top30) - i  # 1 = maior; 30 = menor
-        prefixo = f"#{rank:>2}  " if rank <= TOP_N else f" {rank:>2}  "
-        labels.append(f"{prefixo}Z{int(r.NR_ZONA):>2} • {str(r.nome)[:22]}")
+        prefixo = f"#{rank:>2}" if rank <= TOP_N else f" {rank:>2}"
+        nome = str(r.nome).strip()
+        ra = str(r.RA) if pd.notna(r.RA) else "—"
+        # Quebra nomes muito longos (> 38 chars) para não estourar layout
+        if len(nome) > 38:
+            nome = nome[:37] + "…"
+        labels.append(f"{prefixo}  {nome}\n      Z{int(r.NR_ZONA)} · {ra}")
     ax_rank.barh(range(len(top30)), top30["votos_cristovam"],
-                 color=cores_bar, edgecolor="black", linewidth=0.4, alpha=0.95)
+                 color=cores_bar, edgecolor="black", linewidth=0.4,
+                 alpha=0.95, height=0.72)
     ax_rank.set_yticks(range(len(top30)))
-    ax_rank.set_yticklabels(labels, fontsize=8.5)
-    ax_rank.tick_params(axis="y", which="major", pad=4)
+    ax_rank.set_yticklabels(labels, fontsize=8, linespacing=1.2)
+    ax_rank.tick_params(axis="y", which="major", pad=6)
     ax_rank.set_ylim(-0.6, len(top30) - 0.4)
 
     # Rótulos numéricos no fim de cada barra: total e share local
     xmax = top30["votos_cristovam"].max()
     for i, (_, r) in enumerate(top30.iterrows()):
         ax_rank.text(
-            r.votos_cristovam + xmax * 0.012, i,
+            r.votos_cristovam + xmax * 0.015, i,
             f"{int(r.votos_cristovam):,}".replace(",", ".") + f"  ({r.share:.1f}%)",
-            va="center", fontsize=7.5,
+            va="center", fontsize=7,
         )
-    ax_rank.set_xlim(0, xmax * 1.28)
-    ax_rank.set_xlabel("Votos Cristovam 2018  (rótulo final: total e share local %)",
-                       fontsize=9.5)
+    ax_rank.set_xlim(0, xmax * 1.30)
+    ax_rank.set_xlabel("Votos Cristovam 2018  (rótulo: total · share local %)",
+                       fontsize=9)
     ax_rank.set_title("Top 30 locais — base residual 2018",
                       fontsize=12, fontweight="bold", pad=10)
     ax_rank.grid(axis="x", alpha=0.3, linestyle=":")
