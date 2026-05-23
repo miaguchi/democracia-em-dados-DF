@@ -19,6 +19,12 @@ Análise em dois níveis:
 
 Entregável: tabela de zonas em 3 tiers (defender/disputar/abandonar)
 + mapa por zona da variação 2010→2018 + mapa por seção 2018.
+
+Tiers (critério revisto): força ATUAL — votos_2018 e share_2018.
+DEFENDER = votos >= 15k AND share >= 12%; DISPUTAR = votos >= 12k AND
+share >= 9% (e não DEFENDER); ABANDONAR = resto. O critério anterior
+(baseado em var_pct 2010→2018) classificava Plano Piloto como ABANDONAR
+por causa do tamanho da queda %, apesar dele ainda concentrar a base.
 """
 
 from pathlib import Path
@@ -136,16 +142,20 @@ def main() -> None:
     print(df[["share_2002", "share_2010", "share_2018"]].corr().round(3).to_string())
 
     # ===== 3) Tiers — defender / disputar / abandonar =====
-    # Critério:
-    # - DEFENDER:  alta share_2018 + retenção alta (var_pct > -50%) — base que aguenta
-    # - DISPUTAR:  share_2018 médio + retenção parcial — recuperável
-    # - ABANDONAR: share_2018 baixo + queda profunda (var_pct < -65%) — perdido
+    # Critério (revisado): força ATUAL (massa + share 2018), não decay.
+    # O critério anterior penalizava zonas onde Cristovam perdeu muito em %
+    # mesmo quando ainda tinha base substancial — Plano Piloto (Z1, Z14)
+    # ficava em ABANDONAR apesar de ainda concentrar share elevado.
+    # Para estratégia de campanha, importa onde ele AINDA é forte.
+    # - DEFENDER:  votos_2018 >= 15k E share_2018 >= 12%  (base sólida)
+    # - DISPUTAR:  votos_2018 >= 12k E share_2018 >= 9% (e não DEFENDER)
+    # - ABANDONAR: massa baixa, share baixo, ou zero (Z7, Z12)
     def tier(r):
+        votos = r["crist_2018"] if pd.notna(r["crist_2018"]) else 0
         s = r["share_2018"] if pd.notna(r["share_2018"]) else 0
-        v = r["var_pct_10_18"] if pd.notna(r["var_pct_10_18"]) else -100
-        if s >= 5 and v > -50:
+        if votos >= 15000 and s >= 12:
             return "DEFENDER"
-        if s >= 3 and v > -65:
+        if votos >= 12000 and s >= 9:
             return "DISPUTAR"
         return "ABANDONAR"
 
