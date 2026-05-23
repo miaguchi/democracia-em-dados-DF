@@ -212,44 +212,68 @@ def main() -> None:
                 color="#222", fontweight="bold", alpha=0.85,
             )
 
-    # Bolhas (locais) em vermelho — tamanho = votos absolutos
-    gdf["_size"] = np.clip(gdf["votos_cristovam"] / 8, 5, 280)
+    # Bolhas (locais) — escala mais agressiva, top destacado.
+    # Linear no número de votos (visualmente proporcional à massa real).
+    SIZE_SCALE = 1 / 5     # 2776 votos -> 555 pts²;  100 votos -> 20
+    SIZE_MIN, SIZE_MAX = 3, 650
+    gdf["_size"] = np.clip(gdf["votos_cristovam"] * SIZE_SCALE,
+                           SIZE_MIN, SIZE_MAX)
+
+    # Bolhas comuns — todas as 597 com baixa saturação
     ax_map.scatter(
         gdf["lon"], gdf["lat"], s=gdf["_size"],
-        facecolor="#d62728", edgecolor="white", linewidth=0.4, alpha=0.75,
+        facecolor="#d62728", edgecolor="white", linewidth=0.3, alpha=0.55,
+        zorder=3,
     )
+
+    # Top 10 destacadas — contorno preto grosso e número
+    TOP_N = 10
+    top_locais = gdf.nlargest(TOP_N, "votos_cristovam").reset_index(drop=True)
+    ax_map.scatter(
+        top_locais["lon"], top_locais["lat"],
+        s=top_locais["_size"] * 1.15,
+        facecolor="#8b0000", edgecolor="black", linewidth=1.4, alpha=0.95,
+        zorder=4,
+    )
+    for i, r in top_locais.iterrows():
+        ax_map.text(
+            r.lon, r.lat, str(i + 1),
+            ha="center", va="center", fontsize=9, fontweight="bold",
+            color="white", zorder=5,
+        )
 
     ax_map.set_title(
         f"Cristovam Buarque 2018 — locais de votação sobre share por RA\n"
-        f"Choropleth (RA) = share agregado | Bolhas (local) = votos absolutos",
+        f"Choropleth (RA) = share agregado | Bolhas (local) = votos abs | "
+        f"Top {TOP_N} numerado",
         fontsize=12, fontweight="bold", pad=10,
     )
     ax_map.set_axis_off()
 
-    # Colorbar do choropleth pinada à direita do mapa
+    # Colorbar do choropleth — RODAPÉ do mapa (horizontal), não invade ranking
     divider = make_axes_locatable(ax_map)
-    cax = divider.append_axes("right", size="2.5%", pad=0.1,
+    cax = divider.append_axes("bottom", size="3%", pad=0.15,
                               axes_class=plt.Axes)
     sm = ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
-    cb = fig.colorbar(sm, cax=cax)
+    cb = fig.colorbar(sm, cax=cax, orientation="horizontal")
     cb.set_label("Share Cristovam por RA (%)", fontsize=9)
     cb.ax.tick_params(labelsize=8)
 
-    # Legenda de tamanhos das bolhas — caixa flutuante no canto inferior
-    # esquerdo do mapa, sem cobrir o Plano Piloto (centro-leste)
+    # Legenda de tamanhos das bolhas — canto inferior esquerdo do mapa
     sizes_demo = [100, 500, 1500, 2500]
     handles_size = [
         Line2D([], [], marker="o", linestyle="",
                markerfacecolor="#d62728", markeredgecolor="white",
-               markersize=np.sqrt(np.clip(v / 8, 5, 280)),
-               alpha=0.75, label=f"{v:,} votos".replace(",", "."))
+               markersize=np.sqrt(np.clip(v * SIZE_SCALE,
+                                          SIZE_MIN, SIZE_MAX)),
+               alpha=0.7, label=f"{v:,} votos".replace(",", "."))
         for v in sizes_demo
     ]
     ax_map.legend(
         handles=handles_size, loc="lower left", fontsize=8,
         title="Votos Cristovam por local", title_fontsize=8.5,
-        framealpha=0.95, labelspacing=1.2, borderpad=0.9,
+        framealpha=0.95, labelspacing=1.4, borderpad=0.9,
     )
 
     # ----- RANKING top 30 -----
@@ -262,11 +286,15 @@ def main() -> None:
     norm_bar = Normalize(vmin=vmin_bar, vmax=vmax_bar)
     cores_bar = [cmap_bar(norm_bar(v)) for v in top30["votos_cristovam"]]
 
-    # Labels curtos: "Z15 • UNIEURO" (truncado a 24 chars no nome do local)
-    labels = [
-        f"Z{int(r.NR_ZONA):>2} • {str(r.nome)[:24]}"
-        for _, r in top30.iterrows()
-    ]
+    # Labels curtos com numeração (top 10 numerados pra casar com bolhas
+    # destacadas no mapa). top30 está em ordem crescente (smallest no
+    # topo do barh por causa do iloc[::-1]); número de ranking é
+    # (len(top30) - i) — ou seja, o último elemento iterado é o #1.
+    labels = []
+    for i, (_, r) in enumerate(top30.iterrows()):
+        rank = len(top30) - i  # 1 = maior; 30 = menor
+        prefixo = f"#{rank:>2}  " if rank <= TOP_N else f" {rank:>2}  "
+        labels.append(f"{prefixo}Z{int(r.NR_ZONA):>2} • {str(r.nome)[:22]}")
     ax_rank.barh(range(len(top30)), top30["votos_cristovam"],
                  color=cores_bar, edgecolor="black", linewidth=0.4, alpha=0.95)
     ax_rank.set_yticks(range(len(top30)))
